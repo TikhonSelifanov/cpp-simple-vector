@@ -44,7 +44,6 @@ public:
         {
             return Type{};
         });
-        // А разве не нужен try catch, чтобы когда выбрасывается исключение, вернуть объект в нулевое состояние?
     }
 
     // Создаёт вектор из size элементов, инициализированных значением value
@@ -144,24 +143,6 @@ public:
         }
     }
 
-    void ShiftArrayWithInsertNoMove(const Type& value, int index)
-    {
-        for (int i = size_ - 1; i >= index; --i)
-        {
-            items_[i + 1] = items_[i];
-        }
-        items_[index] = value;
-    }
-
-    void ShiftArrayWithInsertAndMove(Type&& value, int index)
-    {
-        for (int i = size_ - 1; i >= index; --i)
-        {
-            items_[i + 1] = std::move(items_[i]);
-        }
-        items_[index] = std::move(value);
-    }
-
     // Вставляет значение value в позицию pos.
     // Возвращает итератор на вставленное значение
     // Если перед вставкой значения вектор был заполнен полностью,
@@ -225,7 +206,7 @@ public:
         assert(pos >= cbegin() && pos <= cend());
         if (!IsEmpty())
         {
-            size_t index = pos - begin(); // с ассертом переполнения не должно быть (худший случай begin - begin)
+            size_t index = pos - begin();
             for (size_t i = index; i < size_ - 1; ++i)
             {
                 items_[i] = std::move(items_[i + 1]);
@@ -265,15 +246,15 @@ public:
     // Возвращает ссылку на элемент с индексом index
     Type& operator[](size_t index) noexcept
     {
-        assert(index <= size_);
-        return items_.Get()[index];
+        assert(index < size_);
+        return items_[index];
     }
 
     // Возвращает константную ссылку на элемент с индексом index
     const Type& operator[](size_t index) const noexcept
     {
-        assert(index <= size_);
-        return items_.Get()[index];
+        assert(index < size_);
+        return items_[index];
     }
 
     // Возвращает константную ссылку на элемент с индексом index
@@ -335,7 +316,7 @@ public:
     // Для пустого массива может быть равен (или не равен) nullptr
     Iterator begin() noexcept
     {
-        return &items_.Get()[0]; // не могу использовать ...Get() и Get() + size_, в 231 строке ошибка будет
+        return &items_.Get()[0];
     }
 
     // Возвращает итератор на элемент, следующий за последним
@@ -377,6 +358,24 @@ private:
     ArrayPtr<Type> items_ = {};
     size_t size_ = 0;
     size_t capacity_ = 0;
+
+    void ShiftArrayWithInsertNoMove(const Type& value, int index)
+    {
+        for (int i = size_ - 1; i >= index; --i)
+        {
+            items_[i + 1] = items_[i];
+        }
+        items_[index] = value;
+    }
+
+    void ShiftArrayWithInsertAndMove(Type&& value, int index)
+    {
+        for (int i = size_ - 1; i >= index; --i)
+        {
+            items_[i + 1] = std::move(items_[i]);
+        }
+        items_[index] = std::move(value);
+    }
 };
 
 template <typename Type>
