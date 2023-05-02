@@ -23,8 +23,7 @@ public:
         }
     }
 
-    // Конструктор из сырого указателя, хранящего адрес массива в куче 
-либо nullptr
+    // Конструктор из сырого указателя, хранящего адрес массива в куче либо nullptr
     explicit ArrayPtr(Type* raw_ptr) noexcept
     {
         raw_ptr_ = raw_ptr;
@@ -49,12 +48,12 @@ public:
 
     ArrayPtr& operator=(ArrayPtr&& other)
     {
-        raw_ptr_ = std::exchange(other.raw_ptr_, nullptr);
+        // А почему нужно именно swap?
+        this->swap(other);
         return *this;
     }
 
-    // Прекращает владением массивом в памяти, возвращает значение адреса 
-массива
+    // Прекращает владением массивом в памяти, возвращает значение адреса массива
     // После вызова метода указатель на массив должен обнулиться
     [[nodiscard]] Type* Release() noexcept
     {
@@ -75,15 +74,13 @@ public:
         return *(raw_ptr_ + index);
     }
 
-    // Возвращает true, если указатель ненулевой, и false в противном 
-случае
+    // Возвращает true, если указатель ненулевой, и false в противном случае
     explicit operator bool() const
     {
-        return raw_ptr_ == nullptr ? false : true;
+        return raw_ptr_ == nullptr;
     }
 
-    // Возвращает значение сырого указателя, хранящего адрес начала 
-массива
+    // Возвращает значение сырого указателя, хранящего адрес начала массива
     Type* Get() const noexcept
     {
         return raw_ptr_;
@@ -98,4 +95,3 @@ public:
 private:
     Type* raw_ptr_ = nullptr;
 };
-

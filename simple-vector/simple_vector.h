@@ -34,77 +34,30 @@ public:
         Reserve(wrap.to_reserve);
     }
 
-    // Создаёт вектор из size элементов, инициализированных значением по 
-умолчанию
+    // Создаёт вектор из size элементов, инициализированных значением по умолчанию
     explicit SimpleVector(size_t size)
         : items_(size),
           size_(size),
           capacity_(size)
     {
-        try
+        std::generate(begin(), end(), []()
         {
-            std::generate(begin(), end(), []()
-            {
-                return Type{};
-            });
-        }
-        catch (std::bad_alloc&)
-        {
-//            items_.Release();
-//            тут насколько я знаю еще должен быть Release,
-//            но тренажер не пускает, поскольку я тогда игнорирую 
-возвращаемое значение
-            size_ = 0;
-            capacity_ = 0;
-            throw;
-        }
+            return Type{};
+        });
+        // А разве не нужен try catch, чтобы когда выбрасывается исключение, вернуть объект в нулевое состояние?
     }
 
-    // Создаёт вектор из size элементов, инициализированных значением 
-value
+    // Создаёт вектор из size элементов, инициализированных значением value
     SimpleVector(size_t size, const Type& value)
         : items_(size),
           size_(size),
           capacity_(size)
     {
-        try
+        // может выбросить bad_alloc
+        std::generate(begin(), end(), [&value]()
         {
-            // может выбросить bad_alloc
-            std::generate(begin(), end(), [&value]()
-            {
-                return value;
-            });
-        }
-        catch (std::bad_alloc&)
-        {
-//            items_.Release();
-//            тут насколько я знаю еще должен быть Release,
-//            но тренажер не пускает, поскольку я тогда игнорирую 
-возвращаемое значение
-            size_ = 0;
-            capacity_ = 0;
-            throw;
-        }
-    }
-
-    template <typename Container>
-    void InitializeVecByCopy(const Container& cont)
-    {
-        try
-        {
-            std::copy(cont.begin(), cont.end(), begin());
-            // Может выбросить bad_alloc
-        }
-        catch (std::bad_alloc&)
-        {
-//            items_.Release();
-//            тут насколько я знаю еще должен быть Release,
-//            но тренажер не пускает, поскольку я тогда игнорирую 
-возвращаемое значение
-            size_ = 0;
-            capacity_ = 0;
-            throw;
-        }
+            return value;
+        });
     }
 
     // Создаёт вектор из std::initializer_list
@@ -113,7 +66,7 @@ value
           size_(init.size()),
           capacity_(init.size())
     {
-        InitializeVecByCopy(init);
+        std::copy(init.begin(), init.end(), begin());
     }
 
     // Copy constructor
@@ -122,7 +75,7 @@ value
           size_(other.GetSize()),
           capacity_(other.GetCapacity())
     {
-        InitializeVecByCopy(other);
+        std::copy(other.begin(), other.end(), begin());
     }
 
     SimpleVector(SimpleVector&& other) noexcept
@@ -191,37 +144,47 @@ value
         }
     }
 
+    void ShiftArrayWithInsertNoMove(const Type& value, int index)
+    {
+        for (int i = size_ - 1; i >= index; --i)
+        {
+            items_[i + 1] = items_[i];
+        }
+        items_[index] = value;
+    }
+
+    void ShiftArrayWithInsertAndMove(Type&& value, int index)
+    {
+        for (int i = size_ - 1; i >= index; --i)
+        {
+            items_[i + 1] = std::move(items_[i]);
+        }
+        items_[index] = std::move(value);
+    }
+
     // Вставляет значение value в позицию pos.
     // Возвращает итератор на вставленное значение
     // Если перед вставкой значения вектор был заполнен полностью,
-    // вместимость вектора должна увеличиться вдвое, а для вектора 
-вместимостью 0 стать равной 1
+    // вместимость вектора должна увеличиться вдвое, а для вектора вместимостью 0 стать равной 1
     Iterator Insert(ConstIterator pos, const Type& value)
     {
+        assert(pos >= cbegin() && pos <= cend());
         if (IsEmpty())
         {
             PushBack(value);
             return begin();
         }
 
-        size_t index = pos - begin();
+        int index = pos - begin();
         if (size_ != capacity_)
         {
-            for (size_t i = size_ - 1; i >= index; --i)
-            {
-                items_[i + 1] = items_[i];
-            }
-            items_[index] = value;
+            ShiftArrayWithInsertNoMove(value, index);
             ++size_;
         }
         else
         {
-            Resize(size_ + 1);
-            for (size_t i = size_ - 1; i >= index; --i)
-            {
-                items_[i + 1] = items_[i];
-            }
-            items_[index] = value;
+            Resize(size_ + 1); // Размерность меняется в самом ресайз
+            ShiftArrayWithInsertNoMove(value, index);
         }
         return begin() + index;
     }
@@ -229,35 +192,22 @@ value
     // Insert для rvalue ссылки
     Iterator Insert(ConstIterator pos, Type&& value)
     {
+        assert(pos >= cbegin() && pos <= cend());
         if (IsEmpty())
         {
             PushBack(std::move(value));
             return begin();
         }
-        size_t index = pos - begin();
+        int index = pos - begin();
         if (size_ != capacity_)
         {
-            for (size_t i = size_ - 1; i >= index; --i)
-            {
-                items_[i + 1] = std::move(items_[i]);
-                // без этого ифа ломается программа, i начинает уходить в 
-отрицательные значения (в очень большие у size_t)
-                if (i == index)
-                {
-                    break;
-                }
-            }
-            items_[index] = std::move(value);
+            ShiftArrayWithInsertAndMove(std::move(value), index);
             ++size_;
         }
         else
         {
             Resize(size_ + 1);
-            for (size_t i = size_ - 1; i >= index; --i)
-            {
-                items_[i + 1] = std::move(items_[i]);
-            }
-            items_[index] = std::move(value);
+            ShiftArrayWithInsertAndMove(std::move(value), index);
         }
         return begin() + index;
     }
@@ -265,22 +215,25 @@ value
     // "Удаляет" последний элемент вектора. Вектор не должен быть пустым
     void PopBack() noexcept
     {
-        if (size_ != 0)
-        {
-            --size_;
-        }
+        assert(size_ != 0);
+        --size_;
     }
 
     // Удаляет элемент вектора в указанной позиции
     Iterator Erase(ConstIterator pos)
     {
-        size_t index = pos - begin();
-        for (size_t i = index; i < size_ - 1; ++i)
+        assert(pos >= cbegin() && pos <= cend());
+        if (!IsEmpty())
         {
-            items_[i] = std::move(items_[i + 1]);
+            size_t index = pos - begin(); // с ассертом переполнения не должно быть (худший случай begin - begin)
+            for (size_t i = index; i < size_ - 1; ++i)
+            {
+                items_[i] = std::move(items_[i + 1]);
+            }
+            --size_;
+            return begin() + index;
         }
-        --size_;
-        return begin() + index;
+        return Iterator{};
     }
 
     // Обменивает значение с другим вектором
@@ -312,12 +265,14 @@ value
     // Возвращает ссылку на элемент с индексом index
     Type& operator[](size_t index) noexcept
     {
+        assert(index <= size_);
         return items_.Get()[index];
     }
 
     // Возвращает константную ссылку на элемент с индексом index
     const Type& operator[](size_t index) const noexcept
     {
+        assert(index <= size_);
         return items_.Get()[index];
     }
 
@@ -327,7 +282,7 @@ value
     {
         if (index >= size_)
         {
-            throw std::out_of_range("");
+            throw std::out_of_range("Index is out of range");
         }
         return items_.Get()[index];
     }
@@ -350,8 +305,7 @@ value
     }
 
     // Изменяет размер массива.
-    // При увеличении размера новые элементы получают значение по 
-умолчанию для типа Type
+    // При увеличении размера новые элементы получают значение по умолчанию для типа Type
     void Resize(size_t new_size)
     {
         if (size_ == new_size)
@@ -366,11 +320,6 @@ value
             this->swap(newVec);
 
             capacity_ = std::max(capacity_ * 2, new_size);
-            size_ = new_size;
-        }
-        else if (new_size < size_)
-        {
-            size_ = new_size;
         }
         else if (new_size <= capacity_)
         {
@@ -378,15 +327,15 @@ value
             {
                 items_.Get()[i] = Type{};
             }
-            size_ = new_size;
         }
+        size_ = new_size;
     }
 
     // Возвращает итератор на начало массива
     // Для пустого массива может быть равен (или не равен) nullptr
     Iterator begin() noexcept
     {
-        return &items_.Get()[0];
+        return &items_.Get()[0]; // не могу использовать ...Get() и Get() + size_, в 231 строке ошибка будет
     }
 
     // Возвращает итератор на элемент, следующий за последним
@@ -431,8 +380,7 @@ private:
 };
 
 template <typename Type>
-inline bool operator==(const SimpleVector<Type>& lhs, const 
-SimpleVector<Type>& rhs)
+inline bool operator==(const SimpleVector<Type>& lhs, const SimpleVector<Type>& rhs)
 {
     if (lhs.GetSize() != rhs.GetSize())
     {
@@ -442,42 +390,35 @@ SimpleVector<Type>& rhs)
 }
 
 template <typename Type>
-inline bool operator!=(const SimpleVector<Type>& lhs, const 
-SimpleVector<Type>& rhs)
+inline bool operator!=(const SimpleVector<Type>& lhs, const SimpleVector<Type>& rhs)
 {
     return !(rhs == lhs);
 }
 
 template <typename Type>
-inline bool operator<(const SimpleVector<Type>& lhs, const 
-SimpleVector<Type>& rhs)
+inline bool operator<(const SimpleVector<Type>& lhs, const SimpleVector<Type>& rhs)
 {
     if (lhs == rhs)
     {
         return false;
     }
-    return std::lexicographical_compare(lhs.begin(), lhs.end(), 
-rhs.begin(), rhs.end());
+    return std::lexicographical_compare(lhs.begin(), lhs.end(), rhs.begin(), rhs.end());
 }
 
 template <typename Type>
-inline bool operator<=(const SimpleVector<Type>& lhs, const 
-SimpleVector<Type>& rhs)
+inline bool operator<=(const SimpleVector<Type>& lhs, const SimpleVector<Type>& rhs)
 {
     return !(rhs < lhs);
 }
 
 template <typename Type>
-inline bool operator>(const SimpleVector<Type>& lhs, const 
-SimpleVector<Type>& rhs)
+inline bool operator>(const SimpleVector<Type>& lhs, const SimpleVector<Type>& rhs)
 {
     return rhs < lhs;
 }
 
 template <typename Type>
-inline bool operator>=(const SimpleVector<Type>& lhs, const 
-SimpleVector<Type>& rhs)
+inline bool operator>=(const SimpleVector<Type>& lhs, const SimpleVector<Type>& rhs)
 {
     return !(rhs > lhs);
 }
-
